@@ -660,7 +660,7 @@ function App() {
         <meta charset="UTF-8" />
         <title>Ticket ${escapeHtml(ticketArg.folio)}</title>
         <style>
-          @page { size: 80mm auto; margin: 3mm; }
+          @page { size: 58mm auto; margin: 2mm; }
           * { box-sizing: border-box; }
           body {
             margin: 0;
@@ -669,7 +669,7 @@ function App() {
             font-family: "Courier New", monospace;
             font-size: 12px;
           }
-          .ticket { width: 72mm; margin: 0 auto; }
+          .ticket { width: 52mm; margin: 0 auto; }
           .center { text-align: center; }
           h1 { margin: 0; font-size: 18px; letter-spacing: 0.5px; }
           p { margin: 2px 0; }
