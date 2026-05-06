@@ -1221,3 +1221,95 @@ select option {
   margin: 4px 0 0;
   color: var(--muted);
 }
+
+/* Mejor lectura para contenido de pedidos en móvil */
+.order-summary div,
+.detail-products div,
+.ticket-items div {
+  font-size: 1.08rem;
+  line-height: 1.35;
+}
+
+.order-summary span,
+.detail-products span,
+.ticket-items span {
+  font-weight: 800;
+}
+
+.order-summary strong,
+.detail-products strong,
+.ticket-items strong {
+  font-size: 1.12rem;
+  font-weight: 1000;
+}
+
+.summary-total {
+  font-size: 1.28rem !important;
+}
+
+.summary-total strong {
+  font-size: 1.45rem !important;
+}
+
+.ticket-meta,
+.dark-meta {
+  font-size: 1.05rem;
+}
+
+.ticket-meta strong,
+.dark-meta strong {
+  font-size: 1.08rem;
+}
+
+.modal-card h2,
+.ticket-card h2 {
+  font-size: 1.75rem;
+}
+
+.modal-card h3 {
+  font-size: 1.35rem;
+}
+
+.cash-input {
+  font-size: 1.08rem;
+}
+
+.cash-input input,
+.cash-input textarea {
+  font-size: 1.05rem;
+}
+
+.payment-btn {
+  font-size: 1.08rem;
+}
+
+@media (max-width: 520px) {
+  .order-summary div,
+  .detail-products div,
+  .ticket-items div {
+    font-size: 1.16rem;
+  }
+
+  .order-summary strong,
+  .detail-products strong,
+  .ticket-items strong {
+    font-size: 1.2rem;
+  }
+
+  .summary-total {
+    font-size: 1.35rem !important;
+  }
+
+  .summary-total strong {
+    font-size: 1.55rem !important;
+  }
+
+  .modal-card h2,
+  .ticket-card h2 {
+    font-size: 1.9rem;
+  }
+
+  .modal-card {
+    padding: 24px;
+  }
+}
