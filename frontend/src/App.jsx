@@ -710,14 +710,22 @@ function App() {
     lines.push(lineTicket('Pago:', ticketArg.metodo_pago, width));
     lines.push(separator);
 
+    const ESC = '\x1B';
+    const GS = '\x1D';
+    const BOLD_ON = `${ESC}E\x01`;
+    const BOLD_OFF = `${ESC}E\x00`;
+    const BIG_ON = `${GS}!\x10`;      // Doble altura, mismo ancho
+    const BIG_OFF = `${GS}!\x00`;
+
     ticketArg.productos.forEach((item) => {
       const nombre = limpiarTextoTicket(item.nombre);
-      lines.push(`${item.cantidad} x ${nombre}`);
+
+      lines.push(`${BOLD_ON}${BIG_ON}${item.cantidad} x ${nombre}${BIG_OFF}${BOLD_OFF}`);
 
       if (item.precio_unitario !== undefined) {
-        lines.push(lineTicket(`  ${money(item.precio_unitario)} c/u`, money(item.subtotal), width));
+        lines.push(`${BOLD_ON}${lineTicket(`  ${money(item.precio_unitario)} c/u`, money(item.subtotal), width)}${BOLD_OFF}`);
       } else {
-        lines.push(lineTicket('', money(item.subtotal), width));
+        lines.push(`${BOLD_ON}${lineTicket('', money(item.subtotal), width)}${BOLD_OFF}`);
       }
     });
 
@@ -798,8 +806,15 @@ function App() {
     lines.push(lineTicket('Fecha:', formatDate(comandaArg.fecha), width));
     lines.push(separator);
 
+    const ESC = '\x1B';
+    const GS = '\x1D';
+    const BOLD_ON = `${ESC}E\x01`;
+    const BOLD_OFF = `${ESC}E\x00`;
+    const BIG_ON = `${GS}!\x10`;      // Doble altura, mismo ancho
+    const BIG_OFF = `${GS}!\x00`;
+
     comandaArg.productos.forEach((item) => {
-      lines.push(`${item.cantidad} x ${limpiarTextoTicket(item.nombre)}`);
+      lines.push(`${BOLD_ON}${BIG_ON}${item.cantidad} x ${limpiarTextoTicket(item.nombre)}${BIG_OFF}${BOLD_OFF}`);
     });
 
     if (comandaArg.notas) {
@@ -847,7 +862,11 @@ function App() {
           .center { text-align: center; }
           h1 { margin: 0; font-size: 18px; }
           .line { border-top: 1px dashed #000; margin: 8px 0; }
-          .item { margin: 6px 0; font-weight: bold; }
+          .item {
+            margin: 8px 0;
+            font-weight: 900;
+            font-size: 16px;
+          }
         </style>
       </head>
       <body>
@@ -935,7 +954,12 @@ function App() {
           .meta { display: grid; gap: 3px; }
           .row { display: flex; justify-content: space-between; gap: 8px; }
           table { width: 100%; border-collapse: collapse; }
-          td { padding: 3px 0; vertical-align: top; }
+          td {
+            padding: 5px 0;
+            vertical-align: top;
+            font-size: 15px;
+            font-weight: 900;
+          }
           .right { text-align: right; white-space: nowrap; }
           .total { font-size: 15px; font-weight: 900; }
           .soft { color: #333; }
