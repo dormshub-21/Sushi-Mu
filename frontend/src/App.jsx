@@ -185,6 +185,7 @@ function App() {
 
   const [payModal, setPayModal] = useState(false);
   const [ordenModal, setOrdenModal] = useState(false);
+  const [ordenProcesando, setOrdenProcesando] = useState(false);
   const [metodoPago, setMetodoPago] = useState('efectivo');
   const [montoRecibido, setMontoRecibido] = useState('');
   const [notas, setNotas] = useState('');
@@ -437,6 +438,8 @@ function App() {
         return;
       }
 
+      setOrdenProcesando(true);
+
       const payload = {
         notas,
         items: itemsCarrito.map((item) => ({
@@ -450,13 +453,19 @@ function App() {
         body: JSON.stringify(payload)
       });
 
+      if (!data.ok || !data.comanda) {
+        throw new Error(data.message || 'No se pudo generar la comanda.');
+      }
+
       setComanda(data.comanda);
       setOrdenModal(false);
       setCarrito({});
       setNotas('');
-      await cargarMenu();
+      setMensaje('Orden enviada a cocina. Ahora puedes imprimir la comanda.');
     } catch (error) {
       setMensaje(error.message);
+    } finally {
+      setOrdenProcesando(false);
     }
   }
 
@@ -2067,10 +2076,11 @@ function App() {
               <button
                 type="button"
                 className="primary-btn"
-                onClick={() => setOrdenModal(true)}
+                disabled={ordenProcesando}
+                onClick={generarOrden}
               >
                 <Printer size={18} />
-                Confirmar e imprimir comanda
+                {ordenProcesando ? 'Enviando...' : 'Confirmar pedido'}
               </button>
             </div>
           </article>
