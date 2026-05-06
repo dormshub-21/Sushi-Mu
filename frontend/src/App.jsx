@@ -188,6 +188,8 @@ function App() {
   const [montoRecibido, setMontoRecibido] = useState('');
   const [notas, setNotas] = useState('');
   const [ticket, setTicket] = useState(null);
+  const [comanda, setComanda] = useState(null);
+  const [ventaParaCobrar, setVentaParaCobrar] = useState(null);
 
   const [token, setToken] = useState(localStorage.getItem('sushi_token') || '');
   const [loginData, setLoginData] = useState({
@@ -434,18 +436,7 @@ function App() {
         return;
       }
 
-      if (metodoPago === 'efectivo') {
-        const recibido = Number(montoRecibido || 0);
-
-        if (!recibido || recibido < total) {
-          setMensaje('El monto recibido debe cubrir el total.');
-          return;
-        }
-      }
-
       const payload = {
-        metodo_pago: metodoPago,
-        monto_recibido: metodoPago === 'efectivo' ? Number(montoRecibido) : null,
         notas,
         items: itemsCarrito.map((item) => ({
           producto_id: item.id,
@@ -458,11 +449,56 @@ function App() {
         body: JSON.stringify(payload)
       });
 
-      setTicket(data.ticket);
-      setPayModal(false);
+      setComanda(data.comanda);
       setCarrito({});
-      setMontoRecibido('');
       setNotas('');
+      await cargarMenu();
+    } catch (error) {
+      setMensaje(error.message);
+    }
+  }
+
+  async function cobrarOrden() {
+    try {
+      if (!ventaParaCobrar) return;
+
+      setMensaje('');
+
+      if (metodoPago === 'efectivo') {
+        const recibido = Number(montoRecibido || 0);
+        const totalCobro = Number(ventaParaCobrar.total || 0);
+
+        if (!recibido || recibido < totalCobro) {
+          setMensaje('El monto recibido debe cubrir el total de la orden.');
+          return;
+        }
+      }
+
+      const data = await apiRequest(`/api/ventas/${ventaParaCobrar.folio}/cobrar`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          metodo_pago: metodoPago,
+          monto_recibido: metodoPago === 'efectivo' ? Number(montoRecibido) : null
+        })
+      });
+
+      setTicket(data.ticket);
+      setVentaParaCobrar(null);
+      setDetalleVenta(null);
+      setMontoRecibido('');
+      setMetodoPago('efectivo');
+
+      if (adminTab === 'historial') {
+        await cargarHistorial(historial.pagina);
+      }
+
+      if (adminTab === 'metricas') {
+        await cargarDashboard();
+      }
+
+      if (adminTab === 'reportes') {
+        await cargarReporte();
+      }
     } catch (error) {
       setMensaje(error.message);
     }
@@ -735,6 +771,106 @@ function App() {
     }
 
     imprimirTicket(ticketArg);
+  }
+
+
+
+  function crearTextoComandaRawBT(comandaArg) {
+    const width = 32;
+    const separator = '-'.repeat(width);
+    const lines = [];
+
+    lines.push('           Sushi-Mu');
+    lines.push('        COMANDA COCINA');
+    lines.push(separator);
+    lines.push(lineTicket('Orden:', comandaArg.folio, width));
+    lines.push(lineTicket('Fecha:', formatDate(comandaArg.fecha), width));
+    lines.push(separator);
+
+    comandaArg.productos.forEach((item) => {
+      lines.push(`${item.cantidad} x ${limpiarTextoTicket(item.nombre)}`);
+    });
+
+    if (comandaArg.notas) {
+      lines.push(separator);
+      lines.push(`Notas: ${limpiarTextoTicket(comandaArg.notas)}`);
+    }
+
+    lines.push(separator);
+    lines.push('Preparar pedido');
+    lines.push('');
+    lines.push('');
+    lines.push('');
+
+    return lines.join('\n');
+  }
+
+  function imprimirComandaRawBT(comandaArg = comanda) {
+    if (!comandaArg) return;
+
+    const texto = crearTextoComandaRawBT(comandaArg);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+
+    if (isAndroid) {
+      const base64 = textoABase64(texto);
+      window.location.href = `rawbt:base64,${base64}`;
+      return;
+    }
+
+    const html = `
+      <!doctype html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Comanda ${comandaArg.folio}</title>
+        <style>
+          @page { size: 58mm auto; margin: 2mm; }
+          body {
+            margin: 0;
+            background: #fff;
+            color: #000;
+            font-family: "Courier New", monospace;
+            font-size: 12px;
+          }
+          .ticket { width: 52mm; margin: 0 auto; }
+          .center { text-align: center; }
+          h1 { margin: 0; font-size: 18px; }
+          .line { border-top: 1px dashed #000; margin: 8px 0; }
+          .item { margin: 6px 0; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <main class="ticket">
+          <section class="center">
+            <h1>Sushi-Mu</h1>
+            <p>COMANDA COCINA</p>
+          </section>
+          <div class="line"></div>
+          <p>Orden: ${comandaArg.folio}</p>
+          <p>Fecha: ${formatDate(comandaArg.fecha)}</p>
+          <div class="line"></div>
+          ${comandaArg.productos.map((item) => `<p class="item">${item.cantidad} x ${item.nombre}</p>`).join('')}
+          ${comandaArg.notas ? `<div class="line"></div><p>Notas: ${comandaArg.notas}</p>` : ''}
+          <div class="line"></div>
+        </main>
+        <script>
+          window.addEventListener('load', () => setTimeout(() => window.print(), 250));
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=420,height=650');
+
+    if (!printWindow) {
+      setMensaje('El navegador bloqueó la ventana de impresión.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
   }
 
 
@@ -1201,10 +1337,10 @@ function App() {
             <button
               type="button"
               disabled={itemsCarrito.length === 0}
-              onClick={() => setPayModal(true)}
+              onClick={generarOrden}
             >
               <ShoppingBag size={20} />
-              Generar orden
+              Mandar a cocina
             </button>
           </section>
         </>
@@ -1886,11 +2022,78 @@ function App() {
         </section>
       )}
 
+      {ventaParaCobrar && (
+        <section className="modal-backdrop">
+          <article className="modal-card">
+            <div className="modal-header">
+              <h2>Cobrar {ventaParaCobrar.folio}</h2>
+              <button type="button" onClick={() => setVentaParaCobrar(null)}>×</button>
+            </div>
+
+            <div className="order-summary">
+              {(ventaParaCobrar.detalles || []).map((item) => (
+                <div key={item.id}>
+                  <span>{item.cantidad} x {item.producto_nombre}</span>
+                  <strong>{money(item.subtotal)}</strong>
+                </div>
+              ))}
+
+              <div className="summary-total">
+                <span>Total a cobrar</span>
+                <strong>{money(ventaParaCobrar.total)}</strong>
+              </div>
+            </div>
+
+            <h3>Método de pago</h3>
+
+            <div className="payment-grid">
+              {paymentMethods.map((method) => {
+                const Icon = method.icon;
+
+                return (
+                  <button
+                    key={method.key}
+                    type="button"
+                    className={metodoPago === method.key ? 'payment-btn active' : 'payment-btn'}
+                    onClick={() => setMetodoPago(method.key)}
+                  >
+                    <Icon size={20} />
+                    {method.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {metodoPago === 'efectivo' && (
+              <label className="cash-input">
+                ¿Con cuánto paga?
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={montoRecibido}
+                  onChange={(event) => setMontoRecibido(event.target.value)}
+                  placeholder="Ej. 500"
+                />
+
+                <small>
+                  Cambio: {money(Math.max(Number(montoRecibido || 0) - Number(ventaParaCobrar.total || 0), 0))}
+                </small>
+              </label>
+            )}
+
+            <button type="button" className="primary-btn wide" onClick={cobrarOrden}>
+              Cobrar e imprimir ticket
+            </button>
+          </article>
+        </section>
+      )}
+
       {payModal && (
         <section className="modal-backdrop">
           <article className="modal-card">
             <div className="modal-header">
-              <h2>Generar orden</h2>
+              <h2>Mandar a cocina</h2>
               <button type="button" onClick={() => setPayModal(false)}>×</button>
             </div>
 
@@ -1956,6 +2159,52 @@ function App() {
             <button type="button" className="primary-btn wide" onClick={generarOrden}>
               Generar ticket
             </button>
+          </article>
+        </section>
+      )}
+
+      {comanda && (
+        <section className="modal-backdrop">
+          <article className="ticket-card">
+            <div className="ticket-header">
+              <h2>Sushi-Mu</h2>
+              <p>COMANDA COCINA</p>
+            </div>
+
+            <div className="ticket-meta">
+              <span>Orden:</span>
+              <strong>{comanda.folio}</strong>
+
+              <span>Fecha:</span>
+              <strong>{formatDate(comanda.fecha)}</strong>
+            </div>
+
+            <div className="ticket-items">
+              {comanda.productos.map((item, index) => (
+                <div key={`${item.nombre}-${index}`}>
+                  <span>{item.cantidad} x {item.nombre}</span>
+                </div>
+              ))}
+            </div>
+
+            {comanda.notas && (
+              <p className="ticket-notes">
+                Notas: {comanda.notas}
+              </p>
+            )}
+
+            <p className="ticket-thanks">Enviar a cocina 🍣</p>
+
+            <div className="ticket-actions no-print">
+              <button type="button" className="ghost-btn dark" onClick={() => setComanda(null)}>
+                Cerrar
+              </button>
+
+              <button type="button" className="primary-btn" onClick={() => imprimirComandaRawBT(comanda)}>
+                <Printer size={18} />
+                Imprimir comanda
+              </button>
+            </div>
           </article>
         </section>
       )}
@@ -2075,22 +2324,61 @@ function App() {
                 Cerrar
               </button>
 
-              <button
-                type="button"
-                className="ghost-btn"
-                onClick={() => copiarTicketTexto(ticketFromVenta(detalleVenta))}
-              >
-                Copiar ticket
-              </button>
+              {detalleVenta.estado === 'pagada' ? (
+                <>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => copiarTicketTexto(ticketFromVenta(detalleVenta))}
+                  >
+                    Copiar ticket
+                  </button>
 
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => imprimirTicketRawBT(ticketFromVenta(detalleVenta))}
-              >
-                <Printer size={18} />
-                Reimprimir RawBT
-              </button>
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={() => imprimirTicketRawBT(ticketFromVenta(detalleVenta))}
+                  >
+                    <Printer size={18} />
+                    Reimprimir ticket
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => imprimirComandaRawBT({
+                      folio: detalleVenta.folio,
+                      fecha: detalleVenta.creado_en,
+                      notas: detalleVenta.notas,
+                      total: Number(detalleVenta.total),
+                      productos: (detalleVenta.detalles || []).map((item) => ({
+                        nombre: item.producto_nombre,
+                        cantidad: item.cantidad,
+                        precio_unitario: Number(item.precio_unitario),
+                        subtotal: Number(item.subtotal)
+                      }))
+                    })}
+                  >
+                    <Printer size={18} />
+                    Reimprimir comanda
+                  </button>
+
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={() => {
+                      setVentaParaCobrar(detalleVenta);
+                      setMetodoPago('efectivo');
+                      setMontoRecibido('');
+                    }}
+                  >
+                    <Banknote size={18} />
+                    Cobrar pedido
+                  </button>
+                </>
+              )}
             </div>
           </article>
         </section>

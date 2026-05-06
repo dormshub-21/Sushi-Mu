@@ -57,11 +57,11 @@ CREATE TABLE IF NOT EXISTS ventas (
     id BIGSERIAL PRIMARY KEY,
     folio VARCHAR(30) NOT NULL UNIQUE DEFAULT ('S-' || LPAD(nextval('ventas_folio_seq')::TEXT, 6, '0')),
     id_usuario INT REFERENCES usuarios(id),
-    id_metodo_pago INT NOT NULL REFERENCES metodos_pago(id),
+    id_metodo_pago INT REFERENCES metodos_pago(id),
     total NUMERIC(10,2) NOT NULL CHECK (total >= 0),
     monto_recibido NUMERIC(10,2),
     cambio NUMERIC(10,2) NOT NULL DEFAULT 0,
-    estado VARCHAR(30) NOT NULL DEFAULT 'completada',
+    estado VARCHAR(30) NOT NULL DEFAULT 'pendiente_pago',
     notas TEXT,
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

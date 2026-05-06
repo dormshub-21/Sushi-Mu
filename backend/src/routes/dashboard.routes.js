@@ -6,7 +6,7 @@ const router = express.Router();
 
 function buildFilters(query) {
   const params = [];
-  const where = [];
+  const where = ["v.estado = 'pagada'"];
 
   if (query.fecha_desde) {
     params.push(`${query.fecha_desde} 00:00:00`);
