@@ -696,19 +696,41 @@ function App() {
     return lines.join('\n');
   }
 
-  function imprimirTicketRawBT(ticketArg = ticket) {
+  function textoABase64(texto) {
+    const utf8Bytes = new TextEncoder().encode(texto);
+    let binary = '';
+
+    utf8Bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+
+    return btoa(binary);
+  }
+
+  async function copiarTicketTexto(ticketArg = ticket) {
     if (!ticketArg) return;
 
     const texto = crearTextoTicketRawBT(ticketArg);
 
+    try {
+      await navigator.clipboard.writeText(texto);
+      setMensaje('Ticket copiado. Puedes pegarlo en tu editor de texto y mandarlo a RawBT.');
+    } catch (error) {
+      setMensaje('No se pudo copiar automáticamente. Mantén presionado el texto del ticket para copiarlo.');
+    }
+  }
+
+  function imprimirTicketRawBT(ticketArg = ticket) {
+    if (!ticketArg) return;
+
+    const texto = crearTextoTicketRawBT(ticketArg);
     const isAndroid = /Android/i.test(navigator.userAgent);
 
     if (isAndroid) {
-      const intentUrl =
-        `intent:${encodeURIComponent(texto)}` +
-        '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
+      const base64 = textoABase64(texto);
+      const rawbtUrl = `rawbt:base64,${base64}`;
 
-      window.location.href = intentUrl;
+      window.location.href = rawbtUrl;
       return;
     }
 
@@ -1998,6 +2020,10 @@ function App() {
                 Cerrar
               </button>
 
+              <button type="button" className="ghost-btn dark" onClick={() => copiarTicketTexto(ticket)}>
+                Copiar
+              </button>
+
               <button type="button" className="primary-btn" onClick={() => imprimirTicketRawBT(ticket)}>
                 <Printer size={18} />
                 Imprimir RawBT
@@ -2047,6 +2073,14 @@ function App() {
             <div className="ticket-actions">
               <button type="button" className="ghost-btn" onClick={() => setDetalleVenta(null)}>
                 Cerrar
+              </button>
+
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => copiarTicketTexto(ticketFromVenta(detalleVenta))}
+              >
+                Copiar ticket
               </button>
 
               <button
