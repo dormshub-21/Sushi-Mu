@@ -627,6 +627,95 @@ function App() {
     };
   }
 
+
+  function limpiarTextoTicket(value) {
+    return String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x20-\x7E\n]/g, '')
+      .trim();
+  }
+
+  function lineTicket(left = '', right = '', width = 32) {
+    const cleanLeft = limpiarTextoTicket(left);
+    const cleanRight = limpiarTextoTicket(right);
+
+    const space = width - cleanLeft.length - cleanRight.length;
+
+    if (space <= 1) {
+      return `${cleanLeft}\n${cleanRight.padStart(width, ' ')}`;
+    }
+
+    return `${cleanLeft}${' '.repeat(space)}${cleanRight}`;
+  }
+
+  function crearTextoTicketRawBT(ticketArg) {
+    const width = 32;
+    const separator = '-'.repeat(width);
+
+    const lines = [];
+
+    lines.push('           Sushi-Mu');
+    lines.push('        Ticket de venta');
+    lines.push(separator);
+    lines.push(lineTicket('Folio:', ticketArg.folio, width));
+    lines.push(lineTicket('Fecha:', formatDate(ticketArg.fecha), width));
+    lines.push(lineTicket('Pago:', ticketArg.metodo_pago, width));
+    lines.push(separator);
+
+    ticketArg.productos.forEach((item) => {
+      const nombre = limpiarTextoTicket(item.nombre);
+      lines.push(`${item.cantidad} x ${nombre}`);
+
+      if (item.precio_unitario !== undefined) {
+        lines.push(lineTicket(`  ${money(item.precio_unitario)} c/u`, money(item.subtotal), width));
+      } else {
+        lines.push(lineTicket('', money(item.subtotal), width));
+      }
+    });
+
+    if (ticketArg.notas) {
+      lines.push(separator);
+      lines.push(`Notas: ${limpiarTextoTicket(ticketArg.notas)}`);
+    }
+
+    lines.push(separator);
+    lines.push(lineTicket('TOTAL', money(ticketArg.total), width));
+
+    if (ticketArg.monto_recibido !== null) {
+      lines.push(lineTicket('Recibido', money(ticketArg.monto_recibido), width));
+      lines.push(lineTicket('Cambio', money(ticketArg.cambio), width));
+    }
+
+    lines.push(separator);
+    lines.push('    Gracias por su compra');
+    lines.push('');
+    lines.push('');
+    lines.push('');
+
+    return lines.join('\n');
+  }
+
+  function imprimirTicketRawBT(ticketArg = ticket) {
+    if (!ticketArg) return;
+
+    const texto = crearTextoTicketRawBT(ticketArg);
+
+    const isAndroid = /Android/i.test(navigator.userAgent);
+
+    if (isAndroid) {
+      const intentUrl =
+        `intent:${encodeURIComponent(texto)}` +
+        '#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;';
+
+      window.location.href = intentUrl;
+      return;
+    }
+
+    imprimirTicket(ticketArg);
+  }
+
+
   function imprimirTicket(ticketArg = ticket) {
     if (!ticketArg) return;
 
@@ -1909,9 +1998,9 @@ function App() {
                 Cerrar
               </button>
 
-              <button type="button" className="primary-btn" onClick={() => imprimirTicket(ticket)}>
+              <button type="button" className="primary-btn" onClick={() => imprimirTicketRawBT(ticket)}>
                 <Printer size={18} />
-                Imprimir
+                Imprimir RawBT
               </button>
             </div>
           </article>
@@ -1963,10 +2052,10 @@ function App() {
               <button
                 type="button"
                 className="primary-btn"
-                onClick={() => imprimirTicket(ticketFromVenta(detalleVenta))}
+                onClick={() => imprimirTicketRawBT(ticketFromVenta(detalleVenta))}
               >
                 <Printer size={18} />
-                Reimprimir ticket
+                Reimprimir RawBT
               </button>
             </div>
           </article>
