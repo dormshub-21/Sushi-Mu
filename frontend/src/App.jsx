@@ -179,6 +179,7 @@ function App() {
   const [categorias, setCategorias] = useState([]);
   const [productos, setProductos] = useState([]);
   const [categoriaActiva, setCategoriaActiva] = useState('todas');
+  const [busquedaProducto, setBusquedaProducto] = useState('');
   const [carrito, setCarrito] = useState({});
   const [loading, setLoading] = useState(true);
   const [mensaje, setMensaje] = useState('');
@@ -370,9 +371,20 @@ function App() {
   }, [adminTab, view, token]);
 
   const productosFiltrados = useMemo(() => {
-    if (categoriaActiva === 'todas') return productos;
-    return productos.filter((producto) => String(producto.id_categoria) === String(categoriaActiva));
-  }, [productos, categoriaActiva]);
+    const texto = busquedaProducto.trim().toLowerCase();
+
+    return productos.filter((producto) => {
+      const coincideCategoria =
+        categoriaActiva === 'todas' ||
+        String(producto.id_categoria) === String(categoriaActiva);
+
+      const coincideBusqueda =
+        !texto ||
+        producto.nombre?.toLowerCase().includes(texto);
+
+      return coincideCategoria && coincideBusqueda;
+    });
+  }, [productos, categoriaActiva, busquedaProducto]);
 
   const itemsCarrito = useMemo(() => {
     return Object.entries(carrito)
@@ -1301,6 +1313,22 @@ function App() {
                 {categoria.nombre}
               </button>
             ))}
+          </section>
+
+          <section className="product-search-bar">
+            <Search size={22} />
+            <input
+              type="search"
+              value={busquedaProducto}
+              onChange={(event) => setBusquedaProducto(event.target.value)}
+              placeholder="Buscar por nombre..."
+            />
+
+            {busquedaProducto && (
+              <button type="button" onClick={() => setBusquedaProducto('')}>
+                Limpiar
+              </button>
+            )}
           </section>
 
           {loading ? (

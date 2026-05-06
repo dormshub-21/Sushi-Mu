@@ -1340,3 +1340,58 @@ select option {
   min-height: 120px;
   font-size: 1.08rem;
 }
+
+.product-search-bar {
+  width: min(1180px, 100%);
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.22);
+}
+
+.product-search-bar svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.product-search-bar input {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 4px;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.product-search-bar input::placeholder {
+  color: var(--muted);
+}
+
+.product-search-bar button {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-weight: 1000;
+}
+
+@media (max-width: 520px) {
+  .product-search-bar {
+    border-radius: 18px;
+    padding: 10px 12px;
+  }
+
+  .product-search-bar input {
+    font-size: 1.18rem;
+  }
+
+  .product-search-bar button {
+    padding: 9px 11px;
+  }
+}
