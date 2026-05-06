@@ -184,6 +184,7 @@ function App() {
   const [mensaje, setMensaje] = useState('');
 
   const [payModal, setPayModal] = useState(false);
+  const [ordenModal, setOrdenModal] = useState(false);
   const [metodoPago, setMetodoPago] = useState('efectivo');
   const [montoRecibido, setMontoRecibido] = useState('');
   const [notas, setNotas] = useState('');
@@ -450,6 +451,7 @@ function App() {
       });
 
       setComanda(data.comanda);
+      setOrdenModal(false);
       setCarrito({});
       setNotas('');
       await cargarMenu();
@@ -1337,7 +1339,7 @@ function App() {
             <button
               type="button"
               disabled={itemsCarrito.length === 0}
-              onClick={generarOrden}
+              onClick={() => setOrdenModal(true)}
             >
               <ShoppingBag size={20} />
               Mandar a cocina
@@ -2022,8 +2024,61 @@ function App() {
         </section>
       )}
 
-      {ventaParaCobrar && (
+      {ordenModal && (
         <section className="modal-backdrop">
+          <article className="modal-card">
+            <div className="modal-header">
+              <h2>Mandar a cocina</h2>
+              <button type="button" onClick={() => setOrdenModal(false)}>×</button>
+            </div>
+
+            <div className="order-summary">
+              {itemsCarrito.map((item) => (
+                <div key={item.id}>
+                  <span>{item.cantidad} x {item.nombre}</span>
+                  <strong>{money(item.subtotal)}</strong>
+                </div>
+              ))}
+
+              <div className="summary-total">
+                <span>Total de la orden</span>
+                <strong>{money(total)}</strong>
+              </div>
+            </div>
+
+            <label className="cash-input">
+              Notas para cocina
+              <textarea
+                value={notas}
+                onChange={(event) => setNotas(event.target.value)}
+                placeholder="Ej. Sin ajonjolí, sin picante, extra salsa..."
+              />
+            </label>
+
+            <div className="ticket-actions">
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => setOrdenModal(false)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => setOrdenModal(true)}
+              >
+                <Printer size={18} />
+                Confirmar e imprimir comanda
+              </button>
+            </div>
+          </article>
+        </section>
+      )}
+
+      {ventaParaCobrar && (
+        <section className="modal-backdrop modal-top">
           <article className="modal-card">
             <div className="modal-header">
               <h2>Cobrar {ventaParaCobrar.folio}</h2>
@@ -2282,7 +2337,7 @@ function App() {
         </section>
       )}
 
-      {detalleVenta && (
+      {detalleVenta && !ventaParaCobrar && (
         <section className="modal-backdrop">
           <article className="modal-card sale-detail-card">
             <div className="modal-header">
@@ -2370,6 +2425,7 @@ function App() {
                     className="primary-btn"
                     onClick={() => {
                       setVentaParaCobrar(detalleVenta);
+                      setDetalleVenta(null);
                       setMetodoPago('efectivo');
                       setMontoRecibido('');
                     }}

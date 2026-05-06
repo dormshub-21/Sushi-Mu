@@ -1313,3 +1313,30 @@ select option {
     padding: 24px;
   }
 }
+
+.modal-top {
+  z-index: 300 !important;
+}
+
+.modal-top .modal-card {
+  z-index: 301 !important;
+}
+
+.order-summary div,
+.detail-products div,
+.ticket-items div {
+  font-size: 1.16rem;
+  line-height: 1.4;
+}
+
+.order-summary strong,
+.detail-products strong,
+.ticket-items strong {
+  font-size: 1.22rem;
+  font-weight: 1000;
+}
+
+.cash-input textarea {
+  min-height: 120px;
+  font-size: 1.08rem;
+}
