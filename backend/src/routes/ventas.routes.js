@@ -250,6 +250,257 @@ router.post('/', authRequired, adminRequired, async (req, res) => {
   }
 });
 
+
+/**
+ * Editar una orden existente.
+ * Si está pendiente, actualiza la comanda.
+ * Si ya está pagada, actualiza el ticket y recalcula total/cambio.
+ */
+router.put('/:folio', authRequired, adminRequired, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { folio } = req.params;
+    const { items, notas } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        message: 'El pedido debe tener al menos un producto'
+      });
+    }
+
+    const groupedItems = new Map();
+
+    items.forEach((item) => {
+      const productoId = Number(item.producto_id);
+      const cantidad = Number(item.cantidad);
+
+      if (productoId > 0 && cantidad > 0) {
+        groupedItems.set(productoId, (groupedItems.get(productoId) || 0) + cantidad);
+      }
+    });
+
+    const cleanItems = Array.from(groupedItems.entries()).map(([producto_id, cantidad]) => ({
+      producto_id,
+      cantidad
+    }));
+
+    if (cleanItems.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Los productos enviados no son válidos'
+      });
+    }
+
+    await client.query('BEGIN');
+
+    const ventaActualResult = await client.query(
+      `
+      SELECT id, folio, estado, monto_recibido
+      FROM ventas
+      WHERE folio = $1
+      LIMIT 1
+      `,
+      [folio]
+    );
+
+    if (ventaActualResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        ok: false,
+        message: 'Pedido no encontrado'
+      });
+    }
+
+    const ventaActual = ventaActualResult.rows[0];
+
+    if (ventaActual.estado === 'cancelada') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        ok: false,
+        message: 'No se puede editar un pedido cancelado'
+      });
+    }
+
+    const ids = cleanItems.map((item) => item.producto_id);
+
+    const productosResult = await client.query(
+      `
+      SELECT id, nombre, precio, activo
+      FROM productos
+      WHERE id = ANY($1::int[]) AND activo = TRUE
+      `,
+      [ids]
+    );
+
+    if (productosResult.rowCount !== ids.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        ok: false,
+        message: 'Uno o más productos no existen o están inactivos'
+      });
+    }
+
+    const productosMap = new Map();
+
+    productosResult.rows.forEach((producto) => {
+      productosMap.set(Number(producto.id), producto);
+    });
+
+    const detalles = cleanItems.map((item) => {
+      const producto = productosMap.get(item.producto_id);
+      const precioUnitario = toMoney(producto.precio);
+      const subtotal = toMoney(precioUnitario * item.cantidad);
+
+      return {
+        id_producto: item.producto_id,
+        producto_nombre: producto.nombre,
+        cantidad: item.cantidad,
+        precio_unitario: precioUnitario,
+        subtotal
+      };
+    });
+
+    const total = toMoney(detalles.reduce((acc, item) => acc + item.subtotal, 0));
+
+    let cambio = 0;
+
+    if (ventaActual.estado === 'pagada' && ventaActual.monto_recibido !== null) {
+      const recibido = toMoney(ventaActual.monto_recibido);
+
+      if (recibido < total) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          ok: false,
+          message: 'El nuevo total supera el monto recibido. Revisa el cobro antes de editar.'
+        });
+      }
+
+      cambio = toMoney(recibido - total);
+    }
+
+    await client.query(
+      `
+      DELETE FROM venta_detalles
+      WHERE id_venta = $1
+      `,
+      [ventaActual.id]
+    );
+
+    for (const detalle of detalles) {
+      await client.query(
+        `
+        INSERT INTO venta_detalles (
+          id_venta,
+          id_producto,
+          producto_nombre,
+          cantidad,
+          precio_unitario,
+          subtotal
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          ventaActual.id,
+          detalle.id_producto,
+          detalle.producto_nombre,
+          detalle.cantidad,
+          detalle.precio_unitario,
+          detalle.subtotal
+        ]
+      );
+    }
+
+    await client.query(
+      `
+      UPDATE ventas
+      SET
+        total = $1,
+        cambio = CASE
+          WHEN estado = 'pagada' AND monto_recibido IS NOT NULL THEN $2
+          ELSE cambio
+        END,
+        notas = $3
+      WHERE id = $4
+      `,
+      [
+        total,
+        cambio,
+        notas || null,
+        ventaActual.id
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    const ventaFinal = await getVentaConDetalles(folio);
+
+    return res.json({
+      ok: true,
+      message: 'Pedido actualizado correctamente',
+      venta: ventaFinal,
+      ticket: ventaFinal.estado === 'pagada'
+        ? buildTicket(ventaFinal, ventaFinal.detalles)
+        : null,
+      comanda: ventaFinal.estado !== 'pagada'
+        ? buildComanda(ventaFinal, ventaFinal.detalles, ventaFinal.notas)
+        : null
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+
+    console.error('Error editar pedido:', error);
+
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al editar pedido'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * Eliminar pedido definitivamente.
+ * Útil cuando cancelan el pedido.
+ */
+router.delete('/:folio', authRequired, adminRequired, async (req, res) => {
+  try {
+    const { folio } = req.params;
+
+    const result = await pool.query(
+      `
+      DELETE FROM ventas
+      WHERE folio = $1
+      RETURNING folio, estado, total
+      `,
+      [folio]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        ok: false,
+        message: 'Pedido no encontrado'
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: 'Pedido eliminado definitivamente',
+      venta: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error eliminar pedido:', error);
+
+    return res.status(500).json({
+      ok: false,
+      message: 'Error al eliminar pedido'
+    });
+  }
+});
+
+
 /**
  * Cobrar una orden pendiente.
  */

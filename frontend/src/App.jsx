@@ -18,6 +18,7 @@ import {
   FileText,
   ListOrdered,
   Search,
+  Pencil,
   Eye,
   RefreshCw,
   Boxes,
@@ -235,6 +236,10 @@ function App() {
   });
 
   const [detalleVenta, setDetalleVenta] = useState(null);
+  const [pedidoEditando, setPedidoEditando] = useState(null);
+  const [editItems, setEditItems] = useState([]);
+  const [editNotas, setEditNotas] = useState('');
+  const [productoNuevoEdit, setProductoNuevoEdit] = useState('');
 
   const [dashboardFiltros, setDashboardFiltros] = useState({
     ...getPresetRange('hoy'),
@@ -1160,12 +1165,167 @@ function App() {
     printWindow.focus();
   }
 
+
+  function abrirEditarPedido(venta) {
+    const itemsIniciales = (venta.detalles || [])
+      .filter((item) => item.id_producto)
+      .map((item) => ({
+        producto_id: Number(item.id_producto),
+        cantidad: Number(item.cantidad)
+      }));
+
+    setPedidoEditando(venta);
+    setEditItems(itemsIniciales);
+    setEditNotas(venta.notas || '');
+    setProductoNuevoEdit('');
+  }
+
+  function agregarProductoAEdicion() {
+    const productoId = Number(productoNuevoEdit);
+
+    if (!productoId) {
+      setMensaje('Selecciona un producto para agregar.');
+      return;
+    }
+
+    setEditItems((prev) => {
+      const existe = prev.find((item) => Number(item.producto_id) === productoId);
+
+      if (existe) {
+        return prev.map((item) =>
+          Number(item.producto_id) === productoId
+            ? { ...item, cantidad: Number(item.cantidad) + 1 }
+            : item
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          producto_id: productoId,
+          cantidad: 1
+        }
+      ];
+    });
+
+    setProductoNuevoEdit('');
+  }
+
+  function cambiarCantidadEdicion(productoId, cambio) {
+    setEditItems((prev) => {
+      return prev
+        .map((item) => {
+          if (Number(item.producto_id) !== Number(productoId)) return item;
+
+          return {
+            ...item,
+            cantidad: Math.max(Number(item.cantidad) + cambio, 0)
+          };
+        })
+        .filter((item) => Number(item.cantidad) > 0);
+    });
+  }
+
+  async function guardarEdicionPedido() {
+    try {
+      if (!pedidoEditando) return;
+
+      if (editItems.length === 0) {
+        setMensaje('El pedido debe tener al menos un producto.');
+        return;
+      }
+
+      const data = await apiRequest(`/api/ventas/${pedidoEditando.folio}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          notas: editNotas,
+          items: editItems.map((item) => ({
+            producto_id: item.producto_id,
+            cantidad: item.cantidad
+          }))
+        })
+      });
+
+      setPedidoEditando(null);
+      setDetalleVenta(data.venta);
+      setMensaje('Pedido actualizado. La comanda o ticket ya saldrá con los cambios.');
+
+      if (adminTab === 'historial') {
+        await cargarHistorial(historial.pagina);
+      }
+
+      if (adminTab === 'metricas') {
+        await cargarDashboard();
+      }
+
+      if (adminTab === 'reportes') {
+        await cargarReporte();
+      }
+    } catch (error) {
+      setMensaje(error.message);
+    }
+  }
+
+  async function eliminarPedido(folio) {
+    try {
+      await apiRequest(`/api/ventas/${folio}`, {
+        method: 'DELETE'
+      });
+
+      setDetalleVenta(null);
+      setPedidoEditando(null);
+      setVentaParaCobrar(null);
+      setMensaje('Pedido eliminado definitivamente.');
+
+      if (adminTab === 'historial') {
+        await cargarHistorial(historial.pagina);
+      }
+
+      if (adminTab === 'metricas') {
+        await cargarDashboard();
+      }
+
+      if (adminTab === 'reportes') {
+        await cargarReporte();
+      }
+    } catch (error) {
+      setMensaje(error.message);
+    }
+  }
+
+
   function aplicarPreset(setter, type) {
     setter((prev) => ({
       ...prev,
       ...getPresetRange(type)
     }));
   }
+
+
+  const editItemsDetallados = useMemo(() => {
+    return editItems
+      .map((item) => {
+        const producto = adminProductos.find((prod) => String(prod.id) === String(item.producto_id));
+
+        if (!producto) return null;
+
+        const cantidad = Number(item.cantidad || 0);
+        const precio = Number(producto.precio || 0);
+
+        return {
+          ...item,
+          nombre: producto.nombre,
+          precio,
+          subtotal: precio * cantidad
+        };
+      })
+      .filter(Boolean);
+  }, [editItems, adminProductos]);
+
+  const totalEdicionPedido = useMemo(() => {
+    return editItemsDetallados.reduce((acc, item) => acc + item.subtotal, 0);
+  }, [editItemsDetallados]);
+
 
   const maxDashboardVenta = Math.max(
     ...(dashboardData?.ventas_por_dia || []).map((item) => Number(item.total)),
@@ -2399,6 +2559,100 @@ function App() {
         </section>
       )}
 
+      {pedidoEditando && (
+        <section className="modal-backdrop modal-top">
+          <article className="modal-card sale-detail-card">
+            <div className="modal-header">
+              <h2>Editar {pedidoEditando.folio}</h2>
+              <button type="button" onClick={() => setPedidoEditando(null)}>×</button>
+            </div>
+
+            <div className="edit-add-row">
+              <label>
+                Agregar producto
+                <select
+                  value={productoNuevoEdit}
+                  onChange={(event) => setProductoNuevoEdit(event.target.value)}
+                >
+                  <option value="">Selecciona producto</option>
+                  {adminProductos
+                    .filter((producto) => producto.activo)
+                    .map((producto) => (
+                      <option key={producto.id} value={producto.id}>
+                        {producto.nombre} - {money(producto.precio)}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <button type="button" className="primary-btn" onClick={agregarProductoAEdicion}>
+                <Plus size={18} />
+                Agregar
+              </button>
+            </div>
+
+            <div className="edit-items-list">
+              {editItemsDetallados.map((item) => (
+                <div className="edit-item-row" key={item.producto_id}>
+                  <div>
+                    <strong>{item.nombre}</strong>
+                    <small>{money(item.precio)} c/u · Subtotal {money(item.subtotal)}</small>
+                  </div>
+
+                  <div className="edit-qty-actions">
+                    <button
+                      type="button"
+                      className="remove-btn"
+                      onClick={() => cambiarCantidadEdicion(item.producto_id, -1)}
+                    >
+                      <Minus size={16} />
+                    </button>
+
+                    <span>{item.cantidad}</span>
+
+                    <button
+                      type="button"
+                      className="add-btn"
+                      onClick={() => cambiarCantidadEdicion(item.producto_id, 1)}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {editItemsDetallados.length === 0 && (
+                <p className="muted-text">Agrega al menos un producto al pedido.</p>
+              )}
+            </div>
+
+            <label className="cash-input">
+              Notas del pedido
+              <textarea
+                value={editNotas}
+                onChange={(event) => setEditNotas(event.target.value)}
+                placeholder="Notas para cocina o ajustes del pedido..."
+              />
+            </label>
+
+            <div className="summary-total edit-total">
+              <span>Nuevo total</span>
+              <strong>{money(totalEdicionPedido)}</strong>
+            </div>
+
+            <div className="ticket-actions">
+              <button type="button" className="ghost-btn" onClick={() => setPedidoEditando(null)}>
+                Cancelar
+              </button>
+
+              <button type="button" className="primary-btn" onClick={guardarEdicionPedido}>
+                Guardar cambios
+              </button>
+            </div>
+          </article>
+        </section>
+      )}
+
       {detalleVenta && !ventaParaCobrar && (
         <section className="modal-backdrop">
           <article className="modal-card sale-detail-card">
@@ -2435,6 +2689,30 @@ function App() {
                 Notas: {detalleVenta.notas}
               </p>
             )}
+
+            <div className="ticket-actions detail-extra-actions">
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => abrirEditarPedido(detalleVenta)}
+              >
+                <Pencil size={18} />
+                Editar pedido
+              </button>
+
+              <button
+                type="button"
+                className="danger-btn"
+                onClick={() => setConfirmacion({
+                  title: 'Eliminar pedido',
+                  text: `¿Seguro que quieres eliminar ${detalleVenta.folio}? Esto no se puede deshacer.`,
+                  onConfirm: () => eliminarPedido(detalleVenta.folio)
+                })}
+              >
+                <Trash2 size={18} />
+                Eliminar
+              </button>
+            </div>
 
             <div className="ticket-actions">
               <button type="button" className="ghost-btn" onClick={() => setDetalleVenta(null)}>
